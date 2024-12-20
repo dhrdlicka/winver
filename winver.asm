@@ -56,8 +56,8 @@ entry proc near
 
         push    ax                      ; save full version
 
-        mov     cx, 2                   ; up to 2 skipped zeros
-        call    printnum                ; print major version
+        mov     cl, 1                   ; minimum length 1
+        call    print_number            ; print major version
 
         mov     byte ptr [bx], '.'      ; append dot
         inc     bx
@@ -65,8 +65,8 @@ entry proc near
         pop     ax                      ; restore full version
         mov     al, ah                  ; move minor version to AL
 
-        mov     cx, 1                   ; up to 1 skipped zero
-        call    printnum                ; print minor version
+        mov     cl, 2                   ; minimum length 2
+        call    print_number            ; print minor version
 
         mov     byte ptr [bx], '.'      ; append dot
         inc     bx
@@ -110,85 +110,62 @@ entry endp
 ; Inputs:
 ;       AL - byte to format
 ;       BX - string offset
-;       CX - how many digits to skip at most when zero
+;       CX - minimum length
 ;
 ; Uses:
-;       AX, DL, CX
+;       AX, DX, CX
 ;
 ; Outputs:
 ;       BX - end of string offset
 ;
-printnum proc near
-        xor     ah, ah                  ; clear high byte
-        push    ax                      ; save original number
+print_number proc near
+        push    bp
+        mov     bp, sp
+        sub     sp, 2                   ; reserve 2 bytes of stack space
 
-        ;
-        ; Hundreds
-        ;
+        mov     [bp - 2], cl            ; save minimum length to the stack
 
-        mov     dl, 100
-        div     dl                      ; AL = AX / 100 (hundreds digit)
+        mov     cx, 3                   ; loop three times
+        mov     dx, 100                 ; maximum divisor
 
-        test    cx, cx                  ; if CX = 0
-        jz      do_hundreds             ; don't skip trailing zero
+        xor     ah, ah                  ; clear high byte of AX
+
+next_digit:
+        div     dl                      ; divide current remainder by current divisor
+
+        mov     ch, [bp - 2]
+        cmp     cl, ch                  ; if we reached minimum length
+        jle     print_digit             ; print the digit
 
         test    al, al                  ; if digit is zero
-        jz      tens                    ; skip trailing zero
+        jz      skip_digit              ; skip the digit
 
-do_hundreds:
-        call    printdigit              ; append to string
+print_digit:
+        add     al, '0'                 ; convert to ASCII digit
+        mov     [bx], al                ; append to string
+        inc     bx                      ; increment string pointer
 
-        ;
-        ; Tens
-        ;
+skip_digit:
+        push    ax                      ; save result
 
-tens:
-        pop     ax                      ; restore original number
-
+        mov     ax, dx
         mov     dl, 10
-        div     dl                      ; AL = AX / 10 (tens digit)
-                                        ; AL = AX % 10 (ones digit)
+        div     dl                      ; divide divisor by 10
+        mov     dl, al
 
-        dec     cx                      ; decrement trailing zero counter
-        jz      do_tens                 ; don't skip if CX=0
+        pop     ax                      ; restore result
+        mov     al, ah                  ; move remainder to AL
+        xor     ah, ah                  ; clear AH
 
-        test    al, al                  ; if AL = 0
-        jz      ones                    ; skip trailing zero
+        xor     ch, ch                  ; clear CH
 
-do_tens:
-        call    printdigit              ; append to string
+        loop    next_digit
 
-        ;
-        ; Ones
-        ;
-
-ones:
-        mov     al, ah                  ; move last digit to AL
-        call    printdigit              ; append to string
+        mov     sp, bp
+        pop     bp                      ; release stack frame
 
         ret
 
 printnum endp
-
-;
-; Formats a decimal digit and appends it to a string
-;
-; Inputs:
-;       AL - digit to format
-;       BX - string offset
-;
-; Uses:
-;       AL, BX
-;
-; Outputs:
-;       BX - incremented string offset
-;
-printdigit proc near
-        add     al, '0'                 ; convert to ASCII digit
-        mov     [bx], al                ; append to string
-        inc     bx                      ; increment pointer
-
-        ret
-printdigit endp
 
         end     entry
